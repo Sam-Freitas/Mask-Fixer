@@ -1,7 +1,44 @@
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np
-import os, time
+import os, time, glob, subprocess, platform
+from natsort import natsorted
+
+def find_files(folder_path, file_extension='.png', filter1=None, filter2 = None):
+    """
+    Recursively finds and returns all files with the specified extension in the given folder,
+    only if the filter string is contained within the file path.
+
+    Args:
+        folder_path (str): The path to the folder to search.
+        file_extension (str): The file extension to search for (default is '.png').
+        filter (str): The filter string that must be in the file path to be included in the result (default is 'fluorescent_data').
+
+    Returns:
+        list: A list of file paths that match the specified extension and contain the filter string.
+    """
+    found_files = []
+
+    if filter1:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith(file_extension.lower()) and filter1 in os.path.join(root, file):
+                    found_files.append(os.path.join(root, file))
+    else:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith(file_extension.lower()):
+                    found_files.append(os.path.join(root, file))
+
+    # secondary optional filter
+    if filter2:
+        found_files2 = []
+        for file in found_files:
+            if filter2 in file:
+                found_files2.append(file)
+        return found_files2
+    else:
+        return found_files
 
 class ImageEditor:
     def __init__(self, root,path1,path2,path3,i,export_path):
@@ -42,6 +79,7 @@ class ImageEditor:
         self.canvas2 = tk.Canvas(self.frame, width=400, height=400)
         self.canvas2.grid(row=1, column=1, sticky="nsew")
         self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.tk_img2)
+        self.canvas2.bind("<Button-1>", self.paint)
         self.canvas2.bind("<B1-Motion>", self.paint)
         self.canvas2.bind("<Motion>", self.preview_brush)
         
@@ -152,19 +190,31 @@ class ImageEditor:
         
 if __name__ == "__main__":
 
+    path_to_images = 'image_time_stacks'
+
     output_path = 'exported_masks'
     os.makedirs(output_path,exist_ok=True)
 
-    for i in range(5):
+    if platform.system() == 'Windows':
+        subprocess.run(["explorer", os.path.realpath(output_path)], check=False)
+        subprocess.run(["explorer", os.path.realpath(path_to_images)], check=False)
+
+    unmodified_image_filter_name = '_img'
+    modified_image_filter_name = '_mod'
+    mask_filter_name = '_mask'
+
+    unmod_imgs = natsorted(find_files(path_to_images, file_extension='.png', filter1=unmodified_image_filter_name))
+    mod_imgs = natsorted(find_files(path_to_images, file_extension='.png', filter1=modified_image_filter_name))
+    mask_imgs = natsorted(find_files(path_to_images, file_extension='.png', filter1=mask_filter_name))
+
+    for i,this_imgs_paths in enumerate(zip(unmod_imgs,mask_imgs,mod_imgs)):
         # File paths (change accordingly)
         # path1 intial image
-        path1 = "path3.png"
+        path1 = this_imgs_paths[2]
         # masked image
-        path2 = "path2.png"
+        path2 = this_imgs_paths[1]
         # modified image that created the mask
-        path3 = "path1.png"
-        # # export place for the 
-        # path2_edit = "path2_edit.png"
+        path3 = this_imgs_paths[0]
 
         root = tk.Tk()
         app = ImageEditor(root,path1=path1,path2=path2,path3=path3,i=i,export_path = output_path)
