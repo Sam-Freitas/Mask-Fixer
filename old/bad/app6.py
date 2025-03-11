@@ -50,8 +50,8 @@ class ImageEditor:
 
         self.root = root
         self.root.title("Image Editor --- Image " + str(i))
-        # self.root.geometry("1300x900+50+1")  # Set an initial size dynamically fitting the screen
-        self.root.geometry("+50+1")
+        self.root.geometry("900x800+50+1")  # Set an initial size dynamically fitting the screen
+        # self.root.geometry("+50+1")
 
         # set up the export 
         self.i = i
@@ -76,57 +76,58 @@ class ImageEditor:
         
         # Create labels and canvas
         self.frame = tk.Frame(root)
-        # self.frame.pack(expand=True, fill=tk.X)
+        self.frame.pack(expand=True, fill=tk.X)
 
-        self.image_label = tk.Label(root, image=self.tk_img2)
-        self.image_label.grid(row=0, column=0, columnspan=3, rowspan=3) 
+        # self.image_label = tk.Label(root, image=self.tk_img2)
+        # self.image_label.grid(row=0, column=0, columnspan=3, rowspan=3) 
 
-        # self.label2 = tk.Label(self.frame, text="Image 2 (Editable Mask)")
-        # self.label2.grid(row=0, column=0, sticky="nsew")
-        # # create the canvas frame 
-        # self.canvas2 = tk.Canvas(self.frame, width=self.image_size_large[0], height=self.image_size_large[1])
-        # self.canvas2.grid(row=1, column=0, columnspan=3, rowspan=3,sticky="nsew")
-        # # fill the canvas frame with the mask
-        # self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.tk_img2)
-        # # make the editing function
-        # self.canvas2.bind("<Button-1>", self.paint)
-        # self.canvas2.bind("<B1-Motion>", self.paint)
-        # self.canvas2.bind("<Motion>", self.preview_brush)
+        # self.image_label2 = tk.Label(root, image=self.tk_img1)
+        # self.image_label2.grid(row=0, column=4)
 
-        self.image_label2 = tk.Label(root, image=self.tk_img1)
-        self.image_label2.grid(row=0, column=4)
+        # self.image_label3 = tk.Label(root, image=self.tk_img3)
+        # self.image_label3.grid(row=1, column=4)
 
-        self.image_label3 = tk.Label(root, image=self.tk_img3)
-        self.image_label3.grid(row=1, column=4)
-
-        self.image_label4 = tk.Label(root, image=self.tk_overlay)
-        self.image_label4.grid(row=2, column=4)
+        # self.image_label4 = tk.Label(root, image=self.tk_overlay)
+        # self.image_label4.grid(row=2, column=4)
         
-        # # modified image
-        # self.label1 = tk.Label(self.frame, text="Image 1")
-        # self.label1.grid(row=0, column=4, sticky="nsew")
-        # # show img
-        # self.canvas1 = tk.Label(self.frame, image=self.tk_img1)
-        # self.canvas1.grid(row=1, column=4, sticky="nsew")
+
+        self.label2 = tk.Label(self.frame, text="Image 2 (Editable Mask)")
+        self.label2.grid(row=0, column=0, sticky="nsew")
+        # create the canvas frame 
+        self.canvas2 = tk.Canvas(self.frame, width=self.image_size_large[0], height=self.image_size_large[1])
+        self.canvas2.grid(row=1, column=0, columnspan=3, rowspan=3,sticky="nsew")
+        # fill the canvas frame with the mask
+        self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.tk_img2)
+        # make the editing function
+        self.canvas2.bind("<Button-1>", self.paint)
+        self.canvas2.bind("<B1-Motion>", self.paint)
+        self.canvas2.bind("<Motion>", self.preview_brush)
+
+        # modified image
+        self.label1 = tk.Label(self.frame, text="Image 1")
+        self.label1.grid(row=0, column=4, sticky="nsew")
+        # show img
+        self.canvas1 = tk.Label(self.frame, image=self.tk_img1)
+        self.canvas1.grid(row=1, column=4, sticky="nsew")
         
-        # # unmodified image
-        # self.label3 = tk.Label(self.frame, text="Image 3")
-        # self.label3.grid(row=3, column=4, sticky="nsew")
-        # # show img
-        # self.canvas3 = tk.Label(self.frame, image=self.tk_img3)
-        # self.canvas3.grid(row=4, column=4, sticky="nsew")
+        # unmodified image
+        self.label3 = tk.Label(self.frame, text="Image 3")
+        self.label3.grid(row=3, column=4, sticky="nsew")
+        # show img
+        self.canvas3 = tk.Label(self.frame, image=self.tk_img3)
+        self.canvas3.grid(row=4, column=4, sticky="nsew")
         
-        # # overlayed mask and image
-        # self.label4 = tk.Label(self.frame, text="Overlay Image")
-        # self.label4.grid(row=5, column=4, sticky="nsew")
-        # # show the overlay image
-        # self.canvas4 = tk.Label(self.frame, image=self.tk_overlay)
-        # self.canvas4.grid(row=6, column=4, sticky="nsew")
+        # overlayed mask and image
+        self.label4 = tk.Label(self.frame, text="Overlay Image")
+        self.label4.grid(row=5, column=4, sticky="nsew")
+        # show the overlay image
+        self.canvas4 = tk.Label(self.frame, image=self.tk_overlay)
+        self.canvas4.grid(row=6, column=4, sticky="nsew")
         
         # Controls
         self.control_frame = tk.Frame(root)
-        # self.control_frame.pack(fill=tk.BOTH)
-        
+        self.control_frame.pack(fill=tk.X)
+
         self.color = "black"
         self.brush_size = 10
 
@@ -246,9 +247,9 @@ if __name__ == "__main__":
     output_path = 'exported_masks'
     os.makedirs(output_path,exist_ok=True)
 
-    if platform.system() == 'Windows':
-        subprocess.run(["explorer", os.path.realpath(output_path)], check=False)
-        subprocess.run(["explorer", os.path.realpath(path_to_images)], check=False)
+    # if platform.system() == 'Windows':
+    #     subprocess.run(["explorer", os.path.realpath(output_path)], check=False)
+    #     subprocess.run(["explorer", os.path.realpath(path_to_images)], check=False)
 
     unmodified_image_filter_name = '_img'
     modified_image_filter_name = '_mod'
