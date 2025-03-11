@@ -1,8 +1,79 @@
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np
-import os, time, glob, subprocess, platform, sys
+import os, time, glob, subprocess, platform, sys, torch, cv2
 from natsort import natsorted
+from kornia.contrib import connected_components
+
+# def leave_only_largest_blob(binary_image, device='cpu', num_iterations = 1000):
+#     """
+#     Keeps only the largest connected component in a binary image.
+#     Args:
+#         binary_image (torch.Tensor): A 2D binary image tensor (HxW) with values 0 and 1.
+#     Returns:
+#         torch.Tensor: The binary image with only the largest component retained.
+#     """
+
+#     if 'numpy' in str(type(binary_image)):
+#         binary_image = torch.tensor(binary_image)
+
+#     if len(binary_image.shape) != 2 or binary_image.dtype != torch.uint8:
+#         raise ValueError("binary_image must be a 2D binary tensor of type torch.uint8.")
+    
+#     # Reshape for Kornia's connected_components function
+#     binary_image = binary_image.unsqueeze(0).unsqueeze(0).float()  # Shape: (1, 1, H, W)
+    
+#     # Compute connected components
+#     labels = connected_components(binary_image, num_iterations=num_iterations)
+#     labels = labels.squeeze(0).squeeze(0)  # Back to (H, W)
+    
+#     # Convert labels to CPU and int64 for bincount
+#     labels = labels.to(torch.int64).cpu()
+    
+#     # Compute component sizes
+#     component_sizes = torch.bincount(labels.flatten())
+#     component_sizes[0] = 0  # Ignore background
+    
+#     # Find the largest component label
+#     largest_label = torch.argmax(component_sizes).item()
+    
+#     # Create mask for the largest component
+#     largest_component = (labels == largest_label)
+    
+#     return largest_component.to(device)
+
+def leave_only_largest_blob(binary_image, device='cpu', num_iterations=1000):
+    """
+    Keeps only the largest connected component in a binary image.
+    Args:
+        binary_image (torch.Tensor): A 2D binary image tensor (HxW) with values 0 and 1.
+    Returns:
+        torch.Tensor: The binary image with only the largest component retained.
+    """
+    if isinstance(binary_image, (list, tuple)) or 'numpy' in str(type(binary_image)):
+        binary_image = torch.as_tensor(binary_image, dtype=torch.uint8)
+    
+    if binary_image.ndim != 2 or binary_image.dtype != torch.uint8:
+        raise ValueError("binary_image must be a 2D binary tensor of type torch.uint8.")
+    
+    # Move tensor to the target device early
+    binary_image = binary_image.to(device)
+    
+    # Reshape for Kornia's connected_components function and convert to float
+    labels = connected_components(binary_image[None, None].float(), num_iterations=num_iterations)
+    labels = labels.squeeze(0).squeeze(0)  # Back to (H, W)
+    
+    # Compute component sizes efficiently
+    unique_labels, counts = torch.unique(labels, return_counts=True)
+    counts[unique_labels == 0] = 0  # Ignore background
+    
+    # Find the largest component label
+    largest_label = unique_labels[torch.argmax(counts)]
+    
+    # Create mask for the largest component
+    largest_component = labels == largest_label
+    
+    return largest_component.to(device)
 
 def find_files(folder_path, file_extension='.png', filter1=None, filter2 = None):
     """
@@ -79,10 +150,11 @@ class ImageEditor:
         self.frame = tk.Frame(root)
         self.frame.pack(expand=True, fill=tk.BOTH)
 
+        span = 5
         self.label2 = tk.Label(self.frame, text="Image 2 (Editable Mask)")
         self.label2.grid(row=0, column=1, sticky="nsew")
         self.canvas2 = tk.Canvas(self.frame, width=self.image_size_large[0], height=self.image_size_large[1])
-        self.canvas2.grid(row=1, column=1, sticky="nsew",columnspan=5,rowspan=5)
+        self.canvas2.grid(row=1, column=1, sticky="nsew",columnspan=span,rowspan=span)
         self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.tk_img2)
         self.canvas2.bind("<Button-1>", self.paint)
         self.canvas2.bind("<B1-Motion>", self.paint)
@@ -102,6 +174,11 @@ class ImageEditor:
         self.label4.grid(row=4, column=0, sticky="nsew")
         self.canvas4 = tk.Label(self.frame, image=self.tk_overlay)
         self.canvas4.grid(row=5, column=0, sticky="nsew")
+
+        self.label1 = tk.Label(self.frame, text="test")
+        self.label1.grid(row=0, column=span+1, sticky="nsew")
+        self.canvas1 = tk.Label(self.frame, image=self.tk_img1)
+        self.canvas1.grid(row=1, column=span+1, sticky="nsew")
         
         # Controls
         self.control_frame = tk.Frame(root)
@@ -111,15 +188,19 @@ class ImageEditor:
         self.brush_size = 10
 
         # # Buttons at the bottom of the frame
+        # large black fill
+        self.btn_large_black = tk.Button(self.control_frame, text="Large Black", command=lambda: self.set_large_black())
+        self.btn_large_black.pack(side=tk.LEFT, expand=True, fill=tk.X)
         # black fill
         self.btn_black = tk.Button(self.control_frame, text="Black", command=lambda: self.set_color("black"))
         self.btn_black.pack(side=tk.LEFT, expand=True, fill=tk.X)
         # white fill
         self.btn_white = tk.Button(self.control_frame, text="White", command=lambda: self.set_color("white"))
         self.btn_white.pack(side=tk.LEFT, expand=True, fill=tk.X)
-        # large black fill
-        self.btn_large_black = tk.Button(self.control_frame, text="Large Black", command=lambda: self.set_large_black())
-        self.btn_large_black.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        #isolate only the largest blob
+        self.btn_ISO = tk.Button(self.control_frame, text="Isolate Largest", command=self.isolate_large_blob)
+        self.btn_ISO.pack(side=tk.LEFT, expand=True, fill=tk.X)
+
         # reset binary image
         self.btn_reset = tk.Button(self.control_frame, text="Reset", command=self.reset_image)
         self.btn_reset.pack(side=tk.LEFT, expand=True, fill=tk.X)
@@ -141,6 +222,19 @@ class ImageEditor:
         #     self.frame.rowconfigure(i, weight=1)
         # for i in range(2):
         #     self.frame.columnconfigure(i, weight=1)
+
+    def isolate_large_blob(self):
+
+        temp_mask_np = (np.asarray(self.mask)/255).astype(np.uint8)
+        temp_mask_torch = leave_only_largest_blob(temp_mask_np, device='cpu', num_iterations = 500)
+        temp_mask_np = temp_mask_torch.cpu().numpy().astype(np.uint8)*255
+
+        self.mask = Image.fromarray(temp_mask_np)
+
+        self.tk_img2 = ImageTk.PhotoImage(self.mask)
+        self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.tk_img2)
+
+        print('TEST')
     
     def set_large_black(self):
         """Set large brush size for black color."""
