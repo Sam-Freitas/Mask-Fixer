@@ -5,42 +5,10 @@ import os, time, glob, subprocess, platform, sys, torch, cv2
 from natsort import natsorted
 from kornia.contrib import connected_components
 
-# def leave_only_largest_blob(binary_image, device='cpu', num_iterations = 1000):
-#     """
-#     Keeps only the largest connected component in a binary image.
-#     Args:
-#         binary_image (torch.Tensor): A 2D binary image tensor (HxW) with values 0 and 1.
-#     Returns:
-#         torch.Tensor: The binary image with only the largest component retained.
-#     """
-
-#     if 'numpy' in str(type(binary_image)):
-#         binary_image = torch.tensor(binary_image)
-
-#     if len(binary_image.shape) != 2 or binary_image.dtype != torch.uint8:
-#         raise ValueError("binary_image must be a 2D binary tensor of type torch.uint8.")
-    
-#     # Reshape for Kornia's connected_components function
-#     binary_image = binary_image.unsqueeze(0).unsqueeze(0).float()  # Shape: (1, 1, H, W)
-    
-#     # Compute connected components
-#     labels = connected_components(binary_image, num_iterations=num_iterations)
-#     labels = labels.squeeze(0).squeeze(0)  # Back to (H, W)
-    
-#     # Convert labels to CPU and int64 for bincount
-#     labels = labels.to(torch.int64).cpu()
-    
-#     # Compute component sizes
-#     component_sizes = torch.bincount(labels.flatten())
-#     component_sizes[0] = 0  # Ignore background
-    
-#     # Find the largest component label
-#     largest_label = torch.argmax(component_sizes).item()
-    
-#     # Create mask for the largest component
-#     largest_component = (labels == largest_label)
-    
-#     return largest_component.to(device)
+# Device configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if device.type == 'cpu' and torch.backends.mps.is_available():
+    device = torch.device('mps')
 
 def leave_only_largest_blob(binary_image, device='cpu', num_iterations=1000):
     """
@@ -226,7 +194,7 @@ class ImageEditor:
     def isolate_large_blob(self):
 
         temp_mask_np = (np.asarray(self.mask)/255).astype(np.uint8)
-        temp_mask_torch = leave_only_largest_blob(temp_mask_np, device='cpu', num_iterations = 500)
+        temp_mask_torch = leave_only_largest_blob(temp_mask_np, device=device, num_iterations = 500)
         temp_mask_np = temp_mask_torch.cpu().numpy().astype(np.uint8)*255
 
         self.mask = Image.fromarray(temp_mask_np)
