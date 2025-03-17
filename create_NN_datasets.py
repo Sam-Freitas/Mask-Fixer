@@ -1,6 +1,12 @@
 import os,glob,shutil
 from natsort import natsorted
 
+# for image modifications
+from tqdm import tqdm
+import cv2
+import numpy as np
+from skimage.restoration import estimate_sigma
+
 datasets = [
     'GFP_low_signal',
     'tdTomato',
@@ -21,6 +27,11 @@ additional_fluor_name_filter = [
     '_BLUEex',
     'GREENex'
 ]
+
+def s(img):
+
+    cv2.imshow('0',img)
+    cv2.waitKey(0)
 
 def find_files(folder_path, file_extension='.png', filter1=None, filter2 = None):
     """
@@ -84,16 +95,31 @@ def get_imgs_to_copy(imgs_paths,masks_indexes):
 
     return imgs_to_copy_temp, testing_imgs_temp
 
+def del_dir_contents(path_to_dir):
+    files = glob.glob(os.path.join(path_to_dir,'*'))
+    for f in files:
+        try:
+            os.remove(f)
+        except:
+            print('Cant delete:', f)
+
+
 if __name__ == "__main__":
 
-    new_dataset_name = 'isolate_worms_from_single_well_dataset_norm'
+    new_dataset_name = 'isolate_worms_from_single_well_dataset_norm_extraData'
 
     os.makedirs(os.path.join(os.getcwd(),new_dataset_name,'labels'),exist_ok=True)
+    del_dir_contents(os.path.join(os.getcwd(),new_dataset_name,'labels'))
     os.makedirs(os.path.join(os.getcwd(),new_dataset_name,'data'),exist_ok=True)
+    del_dir_contents(os.path.join(os.getcwd(),new_dataset_name,'data'))
     os.makedirs(os.path.join(os.getcwd(),new_dataset_name,'testing_imgs'),exist_ok=True)
+    del_dir_contents(os.path.join(os.getcwd(),new_dataset_name,'testing_imgs'))
 
     counter = 0
+    previous_counter = 0
     testing_counter = 0
+    kernel = np.ones((5,5), np.uint8) 
+
     for this_dataset in datasets:
         print('DATASET:',this_dataset)
 
@@ -161,7 +187,44 @@ if __name__ == "__main__":
         # now do exposures and mods 3
         counter, testing_counter = copy_over_imgs_masks(imgs_to_copy_exp3,masks_paths,testing_imgs_exp3,new_dataset_name,counter,testing_counter)
         counter, testing_counter = copy_over_imgs_masks(mod_to_copy_exp3,masks_paths,testing_mods_exp3,new_dataset_name,counter,testing_counter)
+
+        print('---reading and modifying extra data')
+
+        copied_imgs_paths = natsorted(find_files(os.path.join(os.getcwd(),new_dataset_name,'data'),file_extension = '.png'))
+        copied_masks_paths = natsorted(find_files(os.path.join(os.getcwd(),new_dataset_name,'labels'),file_extension = '.png'))
+
+        copied_imgs_paths = copied_imgs_paths[previous_counter:]
+        copied_masks_paths = copied_masks_paths[previous_counter:]
+
+        for i,(this_img_path,this_mask_path) in tqdm(enumerate(zip(copied_imgs_paths,copied_masks_paths)),total=len(copied_imgs_paths)):
+            # print(i, this_img_path, this_mask_path)
+
+            this_img = cv2.imread(this_img_path,-1)
+            this_mask = cv2.imread(this_mask_path,-1)
+            this_mask = cv2.resize(this_mask,(this_img.shape[0],this_img.shape[1]),interpolation = cv2.INTER_NEAREST)
+            this_fill_mask = cv2.dilate(this_mask,kernel,iterations = 5)
+
+            this_fill_img = cv2.inpaint(this_img, this_fill_mask, 25, cv2.INPAINT_TELEA)
+
+            if this_mask.sum() > 0:
+                temp_img = this_img*((this_fill_mask-this_mask)>0)
+                isolated_pixels = this_img[np.nonzero(temp_img)]
+                this_sigma = estimate_sigma(isolated_pixels)
+                this_noise = np.random.normal(0,this_sigma,this_img.shape)
+
+                this_fill_img = np.clip((this_fill_img+(this_noise*(this_fill_mask>0))),a_max=255,a_min=0).astype(np.uint8)
+            if i == 0:
+                this_blank_mask = np.zeros_like(this_fill_img)
+
+            cv2.imwrite(os.path.join(os.getcwd(),new_dataset_name,'data',str(counter)+'.png'),this_fill_img)
+            cv2.imwrite(os.path.join(os.getcwd(),new_dataset_name,'labels',str(counter)+'.png'),this_blank_mask)
+
+            counter += 1
+
+            # if i >= 250:
+            #     break
     
         print('loop')
+        previous_counter = counter
 
     print('EOF')
