@@ -104,8 +104,10 @@ class ImageEditor:
         self.mask_img = Image.open(path2).convert("L").resize(self.image_size_large, resample=Image.Resampling.NEAREST)  
         # Unmodified image
         self.unmod_img = Image.open(path3).convert("RGBA").resize(self.image_size_small)
+        # small mask
+        self.small_mask_img = Image.open(path2).convert("L").resize(self.image_size_small, resample=Image.Resampling.NEAREST)  
         
-        self.mask = self.mask_img.copy()  # Use path2 directly as the mask
+        self.mask = self.mask_img.copy() # for just the raw np values
         self.overlay_image = self.create_overlay()
         
         # Convert images for display
@@ -113,6 +115,7 @@ class ImageEditor:
         self.tk_img2 = ImageTk.PhotoImage(self.mask)  # Display path2 as editable
         self.tk_img3 = ImageTk.PhotoImage(self.unmod_img)
         self.tk_overlay = ImageTk.PhotoImage(self.overlay_image)
+        self.small_mask = ImageTk.PhotoImage(self.small_mask_img)
         
         # Create labels and canvas
         self.frame = tk.Frame(root)
@@ -128,12 +131,12 @@ class ImageEditor:
         self.canvas2.bind("<B1-Motion>", self.paint)
         self.canvas2.bind("<Motion>", self.preview_brush)
         
-        self.label1 = tk.Label(self.frame, text="Image 1")
+        self.label1 = tk.Label(self.frame, text="Filtered Image")
         self.label1.grid(row=0, column=0, sticky="nsew")
         self.canvas1 = tk.Label(self.frame, image=self.tk_img1)
         self.canvas1.grid(row=1, column=0, sticky="nsew")
         
-        self.label3 = tk.Label(self.frame, text="Image 3")
+        self.label3 = tk.Label(self.frame, text="Original Image")
         self.label3.grid(row=2, column=0, sticky="nsew")
         self.canvas3 = tk.Label(self.frame, image=self.tk_img3)
         self.canvas3.grid(row=3, column=0, sticky="nsew")
@@ -143,9 +146,9 @@ class ImageEditor:
         self.canvas4 = tk.Label(self.frame, image=self.tk_overlay)
         self.canvas4.grid(row=5, column=0, sticky="nsew")
 
-        self.label1 = tk.Label(self.frame, text="test")
+        self.label1 = tk.Label(self.frame, text="Baseline mask")
         self.label1.grid(row=0, column=span+1, sticky="nsew")
-        self.canvas1 = tk.Label(self.frame, image=self.tk_img1)
+        self.canvas1 = tk.Label(self.frame, image=self.small_mask)
         self.canvas1.grid(row=1, column=span+1, sticky="nsew")
         
         # Controls
@@ -153,17 +156,17 @@ class ImageEditor:
         self.control_frame.pack(fill=tk.X)
         
         self.color = "black"
-        self.brush_size = 10
+        self.brush_size = 25
 
         # # Buttons at the bottom of the frame
         # large black fill
         self.btn_large_black = tk.Button(self.control_frame, text="Large Black", command=lambda: self.set_large_black())
         self.btn_large_black.pack(side=tk.LEFT, expand=True, fill=tk.X)
         # black fill
-        self.btn_black = tk.Button(self.control_frame, text="Black", command=lambda: self.set_color("black"))
+        self.btn_black = tk.Button(self.control_frame, text="Black", command=lambda: self.set_color("black",brush_size=self.brush_size))
         self.btn_black.pack(side=tk.LEFT, expand=True, fill=tk.X)
         # white fill
-        self.btn_white = tk.Button(self.control_frame, text="White", command=lambda: self.set_color("white"))
+        self.btn_white = tk.Button(self.control_frame, text="White", command=lambda: self.set_color("white",brush_size=self.brush_size))
         self.btn_white.pack(side=tk.LEFT, expand=True, fill=tk.X)
         #isolate only the largest blob
         self.btn_ISO = tk.Button(self.control_frame, text="Isolate Largest", command=self.isolate_large_blob)
@@ -185,12 +188,6 @@ class ImageEditor:
         self.btn_QUIT = tk.Button(self.control_frame, text="Quit", command=self.quit_app)
         self.btn_QUIT.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        # # Make grid layout responsive
-        # for i in range(4):
-        #     self.frame.rowconfigure(i, weight=1)
-        # for i in range(2):
-        #     self.frame.columnconfigure(i, weight=1)
-
     def isolate_large_blob(self):
 
         temp_mask_np = (np.asarray(self.mask)/255).astype(np.uint8)
@@ -209,22 +206,28 @@ class ImageEditor:
         self.color = "black"
         self.brush_size = 200  # Set a larger brush size
 
-    def set_color(self, color):
+    def set_color(self, color, brush_size = None):
         """Set drawing color."""
         self.color = color
-        self.brush_size = 10 if color == "white" else 10
-    
+        if brush_size is None:
+            self.brush_size = 10 if color == "white" else 10
+        else:
+            self.brush_size = brush_size
+
     def create_overlay(self):
         """Create an overlay image based on img1 and the current mask."""
 
         data = [self.mask.size,self.mod_img.size,self.mask_img.size]
         resize_size = min(data, key = lambda t: t[1])
+        overlay_color = np.array([0,255,0,255],dtype=np.uint8)
+        alpha = 0.4
 
-        mask_np = np.array(self.mask.resize(resize_size)) / 255.0
-        img1_np = np.array(self.mod_img.resize(resize_size), dtype=np.float32)
-        img2_np = np.array(self.mask_img.convert("RGBA").resize(resize_size), dtype=np.float32)
-        overlay_np = img1_np * (1 - mask_np[..., None]) + (img2_np * mask_np[..., None])
-        return Image.fromarray(overlay_np.astype(np.uint8))
+        img = np.asarray(self.unmod_img).copy()
+        mask = np.array(self.mask.resize(resize_size))>0
+        out = img.copy()
+        out[mask] = (1-alpha) * img[mask] + alpha * overlay_color
+        # this should really be a green mask overlay on top of the filtered (mod) image
+        return Image.fromarray(out)
     
     def paint(self, event):
 
@@ -261,6 +264,7 @@ class ImageEditor:
         self.mask = Image.open(path2).convert("L").resize(self.image_size_large)
         self.tk_img2 = ImageTk.PhotoImage(self.mask)
         self.canvas2.create_image(0, 0, anchor=tk.NW, image=self.tk_img2)
+        self.overlay_image = self.create_overlay()
     
     def save_image(self):
         """Save the edited mask as path2_edit.png."""
@@ -282,7 +286,7 @@ class ImageEditor:
         
 if __name__ == "__main__":
 
-    path_to_images = 'image_time_stacks'
+    path_to_images = 'Fluorescent_test_010'
 
     output_path = 'exported_masks'
     os.makedirs(output_path,exist_ok=True)
@@ -307,6 +311,8 @@ if __name__ == "__main__":
         path2 = this_imgs_paths[1]
         # modified image that created the mask
         path3 = this_imgs_paths[0]
+
+        # if there is no mod image then it should be created on the spot
 
         root = tk.Tk()
         app = ImageEditor(root,path1=path1,path2=path2,path3=path3,i=i,export_path = output_path)
