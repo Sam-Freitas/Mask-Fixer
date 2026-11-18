@@ -470,7 +470,7 @@ class ImageEditor:
         # window instead of being frozen at 290 px.
         # Modified (filtered) image - candidate base for the overlay, see OVERLAY_BASE
         # load in the image and normalize it then push it to the PIL type
-        temp = Normalize()(torch.tensor(cv2.imread(path3)).to(torch.float32),std_bound=3)
+        temp = Normalize()(torch.tensor(cv2.imread(path3)).to(torch.float32),std_bound=5)
         temp = np.asarray(temp*255).astype(np.uint8)
 
         self.mod_full = Image.open(path1).convert("RGBA")
