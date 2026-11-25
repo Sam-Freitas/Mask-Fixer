@@ -13,8 +13,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if device.type == 'cpu' and torch.backends.mps.is_available():
     device = torch.device('mps')
 
-output_path = 'exported_masks'
-path_to_images = 'Fluorescent_markers_006-1'
+output_path = 'exported_masksF8'
+path_to_images = 'Fluorescent_markers_008-1'
 
 # ---------------------------------------------------------------------------
 # [CHANGE A5] Cursor-overlay look (safe to tweak). The brush footprint is drawn in the
@@ -470,10 +470,15 @@ class ImageEditor:
         # window instead of being frozen at 290 px.
         # Modified (filtered) image - candidate base for the overlay, see OVERLAY_BASE
         # load in the image and normalize it then push it to the PIL type
-        temp = Normalize()(torch.tensor(cv2.imread(path3)).to(torch.float32),std_bound=5)
+        inital_image = cv2.imread(path3)
+        temp = Normalize()(torch.tensor(inital_image)[:,:,2].to(torch.float32),std_bound=5)
         temp = np.asarray(temp*255).astype(np.uint8)
 
-        self.mod_full = Image.open(path1).convert("RGBA")
+        temp2 = torch.tensor(inital_image).to(torch.float32)
+        temp2 = (temp2[:,:,0])+(temp2[:,:,1])
+        temp2 = np.asarray((temp2/temp2.max())*255).astype(np.uint8)
+
+        # self.mod_full = Image.open(path1).convert("RGBA")da
         # Binary mask: the baseline guess, resampled to the working resolution
         self.mask_img = Image.open(path2).convert("L").resize(self.mask_size, resample=Image.Resampling.NEAREST)
         # Unmodified (original) image - the default base for the overlay
@@ -482,6 +487,8 @@ class ImageEditor:
         # baseline mask at native resolution, for the top-right "Baseline mask" panel
         self.base_full = Image.open(path2).convert("L")
         self.source_side = min(self.unmod_full.size)               # [CHANGE A2] real source resolution
+
+        self.mod_full = Image.fromarray(temp2).convert("RGBA")
         
         # [CHANGE C3] when navigating back to an image edited during this run, pick up the
         # work in progress instead of starting again from the baseline guess.
@@ -1559,20 +1566,18 @@ def main(path_to_images=path_to_images,
     #     subprocess.run(["explorer", os.path.realpath(path_to_images)], check=False)
 
     unmodified_image_filter_name = '_img'
-    modified_image_filter_name = '_mod'
     mask_filter_name = '_mask'
 
     unmod_imgs = natsorted(find_files(path_to_images, file_extension='.png', filter1=unmodified_image_filter_name))
-    mod_imgs = natsorted(find_files(path_to_images, file_extension='.png', filter1=modified_image_filter_name))
     mask_imgs = natsorted(find_files(path_to_images, file_extension='.png', filter1=mask_filter_name))
 
     # [CHANGE C1] the old code was a plain "for i, paths in enumerate(zip(...))", which could
     # only ever move forward. Build the list first and drive it with an index so Prev works.
-    images = list(zip(unmod_imgs, mask_imgs, mod_imgs))
+    images = list(zip(unmod_imgs, mask_imgs))
     # [CHANGE G3] the names the jump selector offers
     names = image_names_from(images)
     if not images:
-        print('no _img / _mask / _mod image triplets found in %s' % path_to_images)
+        print('no _img / _mask / image doubles found in %s' % path_to_images)
         return 0
     # [CHANGE G2] where to start - and say it out loud, so resuming is never a mystery
     i = resolve_start_index(names, output_path, path_to_images, state_path, start_index)
@@ -1588,7 +1593,7 @@ def main(path_to_images=path_to_images,
         this_imgs_paths = images[i]
         # File paths (change accordingly)
         # path1 intial image
-        path1 = this_imgs_paths[2]
+        path1 = None
         # masked image
         path2 = this_imgs_paths[1]
         # modified image that created the mask
@@ -1597,7 +1602,7 @@ def main(path_to_images=path_to_images,
         # if there is no mod image then it should be created on the spot
 
         root = tk.Tk()
-        app = ImageEditor(root, path1=path1, path2=path2, path3=path3, i=i,
+        app = ImageEditor(root, path1=None, path2=path2, path3=path3, i=i,
                           export_path=output_path, total=len(images),
                           restored_mask=edited_masks.get(i), image_names=names)
         root.mainloop()
